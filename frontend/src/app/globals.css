@@ -1,0 +1,49 @@
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+@import "tailwindcss";
+
+:root {
+  --background: #F5F9FE;
+  --foreground: #1A1A1A;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Custom styles from Superdesign Drafts */
+.border-base {
+  border: 1px solid #DDE1E7;
+}
+
+.text-navy {
+  color: #005BC0;
+}
+
+.bg-navy {
+  background-color: #005BC0;
+}
+
+.text-secondary {
+  color: #6B6B6B;
+}
+
+.bg-steel {
+  background-color: #009fee;
+}
+
+.text-amber {
+  color: #C45911;
+}
+
+.map-grid {
+  background-image: radial-gradient(#DDE1E7 0.5px, transparent 0.5px);
+  background-size: 20px 20px;
+}
+
+/* Leaflet Custom Marker Override */
+.custom-gps-marker {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}

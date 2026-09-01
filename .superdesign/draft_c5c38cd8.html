@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1440, initial-scale=1.0">
+    <title>PartLog Intelligence | National Overview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #1A1A1A;
+            -webkit-font-smoothing: antialiased;
+        }
+        .border-base { border: 1px solid #DDE1E7; }
+        .bg-page { background-color: #F4F6F8; }
+        .text-primary { color: #1A1A1A; }
+        .text-secondary { color: #6B6B6B; }
+        .text-navy { color: #1F4E79; }
+        .bg-steel { background-color: #2E75B6; }
+        .text-amber { color: #C45911; }
+        .sidebar-active { background-color: #EAF0F8; border-left: 3px solid #1F4E79; }
+        
+        /* Custom scrollbar for enterprise feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F4F6F8;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #DDE1E7;
+            border-radius: 4px;
+        }
+        
+        .map-grid {
+            background-image: radial-gradient(#DDE1E7 0.5px, transparent 0.5px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="flex min-h-screen bg-page">
+        <!-- Sidebar -->
+        <aside class="fixed top-0 left-0 w-[220px] h-full bg-white border-r border-base z-50">
+            <div class="h-[56px] flex items-center px-6">
+                <span class="text-[18px] font-medium text-navy tracking-tight">PartLog</span>
+            </div>
+            <nav class="mt-4 flex flex-col">
+                <a href="#" id="nav-national" class="sidebar-active px-6 py-2.5 text-[13px] text-navy font-medium">National Overview</a>
+                <a href="#" id="nav-model" class="px-6 py-2.5 text-[13px] text-secondary hover:bg-[#F4F6F8]">Model Analysis</a>
+                <a href="#" id="nav-workshop" class="px-6 py-2.5 text-[13px] text-secondary hover:bg-[#F4F6F8]">Workshop Activity</a>
+                <a href="#" id="nav-failure" class="px-6 py-2.5 text-[13px] text-secondary hover:bg-[#F4F6F8]">Failure Causes</a>
+                <a href="#" id="nav-forecast" class="px-6 py-2.5 text-[13px] text-secondary hover:bg-[#F4F6F8]">Forecast</a>
+                <a href="#" id="nav-settings" class="px-6 py-2.5 text-[13px] text-secondary hover:bg-[#F4F6F8]">Settings</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Wrapper -->
+        <div class="flex-1 ml-[220px]">
+            <!-- Top Bar -->
+            <header class="fixed top-0 right-0 left-[220px] h-[56px] bg-white border-b border-base flex items-center justify-between px-6 z-40">
+                <h1 class="text-[15px] font-medium">National Overview</h1>
+                <div class="text-[13px] text-secondary">
+                    <span class="font-medium text-primary">Ramesh Kumar</span> — Supply Chain Manager &nbsp;&nbsp;|&nbsp;&nbsp; Oct 14, 2023
+                </div>
+            </header>
+
+            <!-- Scrollable Content Area -->
+            <main class="mt-[56px] p-6 space-y-6">
+                <!-- Row 1: KPI Strip -->
+                <div class="grid grid-cols-5 gap-4">
+                    <div class="bg-white border-base p-4 flex flex-col">
+                        <span class="text-[12px] text-secondary uppercase tracking-wide">Total workshops active</span>
+                        <span class="text-[28px] font-medium text-navy mt-1">1,482</span>
+                    </div>
+                    <div class="bg-white border-base p-4 flex flex-col">
+                        <span class="text-[12px] text-secondary uppercase tracking-wide">Entries this month</span>
+                        <span class="text-[28px] font-medium text-navy mt-1">24,105</span>
+                    </div>
+                    <div class="bg-white border-base p-4 flex flex-col">
+                        <span class="text-[12px] text-secondary uppercase tracking-wide">Top model</span>
+                        <span class="text-[28px] font-medium text-navy mt-1 truncate">Swift Dzire</span>
+                    </div>
+                    <div class="bg-white border-base p-4 flex flex-col">
+                        <span class="text-[12px] text-secondary uppercase tracking-wide">Top state</span>
+                        <span class="text-[28px] font-medium text-navy mt-1">Maharashtra</span>
+                    </div>
+                    <div class="bg-white border-base p-4 flex flex-col">
+                        <span class="text-[12px] text-secondary uppercase tracking-wide">Pending sync</span>
+                        <span class="text-[28px] font-medium text-amber mt-1">127</span>
+                    </div>
+                </div>
+
+                <!-- Row 2: Map and Top States -->
+                <div class="grid grid-cols-10 gap-6">
+                    <!-- India Choropleth Placeholder -->
+                    <div class="col-span-6 bg-white border-base p-6">
+                        <div class="text-[13px] text-secondary mb-4">Condenser replacements by district — current month</div>
+                        <div class="h-[400px] w-full bg-[#F9FAFB] map-grid border border-dashed border-[#DDE1E7] relative flex items-center justify-center">
+                           <!-- Schematic representation of India Map -->
+                           <svg viewBox="0 0 200 240" class="w-64 h-full opacity-70">
+                               <path d="M100 20 L120 40 L140 35 L150 60 L180 80 L170 120 L185 160 L140 220 L100 230 L60 220 L30 180 L20 140 L35 100 L25 60 L60 40 Z" fill="none" stroke="#1F4E79" stroke-width="1"/>
+                               <!-- Sample high-intensity areas -->
+                               <circle cx="145" cy="155" r="15" fill="#1F4E79" />
+                               <circle cx="130" cy="140" r="25" fill="#2E75B6" />
+                               <circle cx="80" cy="110" r="20" fill="#7AA2C7" />
+                               <circle cx="110" cy="180" r="18" fill="#D6E4F0" />
+                           </svg>
+                           <div class="absolute bottom-0 left-0 flex items-center space-x-2 pb-2 pl-2">
+                               <span class="text-[12px] text-secondary">Low</span>
+                               <div class="flex space-x-1">
+                                   <div class="w-4 h-4 bg-[#D6E4F0]"></div>
+                                   <div class="w-4 h-4 bg-[#7AA2C7]"></div>
+                                   <div class="w-4 h-4 bg-[#2E75B6]"></div>
+                                   <div class="w-4 h-4 bg-[#1F4E79]"></div>
+                                   <div class="w-4 h-4 bg-[#0F263C]"></div>
+                               </div>
+                               <span class="text-[12px] text-secondary">High</span>
+                           </div>
+                        </div>
+                    </div>
+
+                    <!-- Top 10 States Table -->
+                    <div class="col-span-4 bg-white border-base p-0 flex flex-col">
+                        <div class="p-4">
+                            <h3 class="text-[15px] font-medium">Top 10 states this month</h3>
+                        </div>
+                        <div class="flex-1 overflow-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-[#1F4E79]">
+                                    <tr>
+                                        <th class="px-4 py-2 text-[12px] font-medium text-white uppercase">State</th>
+                                        <th class="px-4 py-2 text-[12px] font-medium text-white uppercase">Units</th>
+                                        <th class="px-4 py-2 text-[12px] font-medium text-white uppercase">vs last month</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-[13px]">
+                                    <tr class="bg-white border-b border-base">
+                                        <td class="px-4 py-2">Maharashtra</td><td class="px-4 py-2">3,410</td><td class="px-4 py-2">+122</td>
+                                    </tr>
+                                    <tr class="bg-[#F4F6F8] border-b border-base">
+                                        <td class="px-4 py-2">Gujarat</td><td class="px-4 py-2">2,895</td><td class="px-4 py-2">-45</td>
+                                    </tr>
+                                    <tr class="bg-white border-b border-base">
+                                        <td class="px-4 py-2">Tamil Nadu</td><td class="px-4 py-2">2,540</td><td class="px-4 py-2">+210</td>
+                                    </tr>
+                                    <tr class="bg-[#F4F6F8] border-b border-base">
+                                        <td class="px-4 py-2">Karnataka</td><td class="px-4 py-2">2,210</td><td class="px-4 py-2">+15</td>
+                                    </tr>
+                                    <tr class="bg-white border-b border-base">
+                                        <td class="px-4 py-2">Delhi NCR</td><td class="px-4 py-2">1,980</td><td class="px-4 py-2">+88</td>
+                                    </tr>
+                                    <tr class="bg-[#F4F6F8] border-b border-base">
+                                        <td class="px-4 py-2">Haryana</td><td class="px-4 py-2">1,740</td><td class="px-4 py-2">-12</td>
+                                    </tr>
+                                    <tr class="bg-white border-b border-base">
+                                        <td class="px-4 py-2">Uttar Pradesh</td><td class="px-4 py-2">1,620</td><td class="px-4 py-2">+340</td>
+                                    </tr>
+                                    <tr class="bg-[#F4F6F8] border-b border-base">
+                                        <td class="px-4 py-2">Rajasthan</td><td class="px-4 py-2">1,410</td><td class="px-4 py-2">-8</td>
+                                    </tr>
+                                    <tr class="bg-white border-b border-base">
+                                        <td class="px-4 py-2">Punjab</td><td class="px-4 py-2">1,250</td><td class="px-4 py-2">+42</td>
+                                    </tr>
+                                    <tr class="bg-[#F4F6F8] border-b border-base">
+                                        <td class="px-4 py-2">Madhya Pradesh</td><td class="px-4 py-2">1,180</td><td class="px-4 py-2">+5</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-3 border-t border-base bg-white">
+                            <a href="#" id="view-all-states" class="text-[12px] text-navy font-medium hover:underline">View all states →</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Full Width Chart -->
+                <div class="bg-white border-base p-6">
+                    <div class="flex justify-between items-start mb-6">
+                        <h3 class="text-[15px] font-medium">Monthly replacement volume vs AI forecast</h3>
+                        <div class="flex space-x-6 items-center">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-3 h-3 bg-steel"></div>
+                                <span class="text-[12px] text-secondary">Actual</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-6 border-t-2 border-amber border-dotted"></div>
+                                <span class="text-[12px] text-secondary">Forecast</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-64 flex items-end justify-between relative pt-10 px-4">
+                        <!-- Y-axis lines -->
+                        <div class="absolute inset-0 flex flex-col justify-between py-10 z-0">
+                            <div class="border-t border-[#F4F6F8]"></div>
+                            <div class="border-t border-[#F4F6F8]"></div>
+                            <div class="border-t border-[#F4F6F8]"></div>
+                            <div class="border-t border-[#F4F6F8]"></div>
+                        </div>
+                        
+                        <!-- Bars (Actuals) and Forecast Line Overlay -->
+                        <div class="w-full flex justify-between items-end h-full z-10">
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[40%]"></div><span class="text-[12px] text-secondary mt-2">JAN</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[45%]"></div><span class="text-[12px] text-secondary mt-2">FEB</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[55%]"></div><span class="text-[12px] text-secondary mt-2">MAR</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[75%]"></div><span class="text-[12px] text-secondary mt-2">APR</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[95%]"></div><span class="text-[12px] text-secondary mt-2">MAY</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[90%]"></div><span class="text-[12px] text-secondary mt-2">JUN</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[80%]"></div><span class="text-[12px] text-secondary mt-2">JUL</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[65%]"></div><span class="text-[12px] text-secondary mt-2">AUG</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[50%]"></div><span class="text-[12px] text-secondary mt-2">SEP</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[45%]"></div><span class="text-[12px] text-secondary mt-2">OCT</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[42%]"></div><span class="text-[12px] text-secondary mt-2">NOV</span></div>
+                            <div class="flex flex-col items-center w-full"><div class="w-12 bg-steel h-[48%]"></div><span class="text-[12px] text-secondary mt-2">DEC</span></div>
+                        </div>
+
+                        <!-- Forecast Dotted Line (Visual Simulation) -->
+                        <svg class="absolute top-10 left-0 w-full h-full z-20 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 1000 100">
+                            <polyline points="0,65 83,60 166,50 250,40 333,15 416,10 500,20 583,30 666,45 750,55 833,60 1000,55" fill="none" stroke="#C45911" stroke-width="2" stroke-dasharray="4,4" />
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Row 4: Models and Failure Causes -->
+                <div class="grid grid-cols-2 gap-6 pb-6">
+                    <!-- Maruti Models Bar Chart -->
+                    <div class="bg-white border-base p-6">
+                        <h3 class="text-[15px] font-medium mb-6">Replacements by model</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Swift</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 85%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">4,210</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Dzire</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 78%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">3,905</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Baleno</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 62%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">2,440</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Ertiga</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 55%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">2,105</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Brezza</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 48%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">1,880</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Alto K10</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 42%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">1,520</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Wagon R</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 38%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">1,390</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-[13px] w-32 shrink-0">Maruti Ignis</span>
+                                <div class="flex-1 bg-gray-50 h-6 relative">
+                                    <div class="bg-navy h-full" style="width: 25%"></div>
+                                </div>
+                                <span class="text-[13px] w-12 text-right ml-4 font-medium">910</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Failure Cause Breakdown Table -->
+                    <div class="bg-white border-base">
+                        <div class="p-6">
+                            <h3 class="text-[15px] font-medium">Failure cause breakdown</h3>
+                        </div>
+                        <div class="px-6 pb-6">
+                            <table class="w-full">
+                                <thead class="border-b border-base">
+                                    <tr>
+                                        <th class="text-left py-2 text-[12px] font-medium text-secondary uppercase">Cause</th>
+                                        <th class="text-right py-2 text-[12px] font-medium text-secondary uppercase">Share %</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-[13px]">
+                                    <tr class="border-b border-base relative">
+                                        <td class="py-3 relative z-10">Stone impact</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">42.4%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 42.4%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr class="border-b border-base">
+                                        <td class="py-3 relative z-10">Corrosion</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">21.8%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 21.8%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr class="border-b border-base">
+                                        <td class="py-3 relative z-10">Accident damage</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">15.2%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 15.2%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr class="border-b border-base">
+                                        <td class="py-3 relative z-10">Pressure failure</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">9.5%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 9.5%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr class="border-b border-base">
+                                        <td class="py-3 relative z-10">Manufacturing defect</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">6.1%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 6.1%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-3 relative z-10">Unknown</td>
+                                        <td class="py-3 text-right relative z-10">
+                                            <div class="flex items-center justify-end">
+                                                <span class="mr-2 font-medium">5.0%</span>
+                                                <div class="w-32 h-2 bg-[#F4F6F8] rounded-full overflow-hidden shrink-0">
+                                                    <div class="bg-slate-300 h-full" style="width: 5.0%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+</html>

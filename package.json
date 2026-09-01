@@ -1,0 +1,11 @@
+{
+  "name": "partlog-workspace",
+  "version": "1.0.0",
+  "description": "Root workspace configuration",
+  "private": true,
+  "license": "ISC",
+  "scripts": {
+    "start": "npx -y concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\" \"npx -y localtunnel --port 3000 --subdomain dull-humans-admire\"",
+    "dev": "npx -y concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\" \"npx -y localtunnel --port 3000 --subdomain dull-humans-admire\""
+  }
+}

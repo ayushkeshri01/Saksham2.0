@@ -1,0 +1,17 @@
+{
+  "name": "Saksham 2.0 Portal",
+  "short_name": "Saksham 2.0",
+  "description": "Vikas Group Data Collection & Analytics Overview Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F9FE",
+  "theme_color": "#023f97",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
