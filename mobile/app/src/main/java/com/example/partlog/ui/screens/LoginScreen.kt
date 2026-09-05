@@ -56,7 +56,7 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
-    val widgetId = "366965655632323634373032"
+    val widgetId = "366965676331323632333333"
     val tokenAuth = "567821TECBH4N2ju6a9bada7P1"
 
     val coroutineScope = rememberCoroutineScope()

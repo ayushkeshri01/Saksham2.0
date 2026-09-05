@@ -556,7 +556,7 @@ app.post('/api/mechanics/login-otp', async (req, res) => {
             // Call MSG91 verifyAccessToken API
             verifiedResult = await new Promise((resolve, reject) => {
                 const postData = JSON.stringify({
-                    "authkey": process.env.MSG91_AUTHKEY || "567821TECBH4N2ju6a9bada7P1",
+                    "authkey": process.env.MSG91_AUTHKEY || "567821AthYSLUR6a9baaa0P1",
                     "access-token": accessToken
                 });
 

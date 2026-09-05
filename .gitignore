@@ -57,3 +57,5 @@ mobile/build_error*.txt
 mobile/build_output*.txt
 mobile/*.dll
 mobile/app/build/
+backend/.env.example
+backend/public/test-otp.html
