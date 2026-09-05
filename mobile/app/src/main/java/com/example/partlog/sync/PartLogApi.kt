@@ -36,4 +36,16 @@ interface PartLogApi {
         @Path("id") id: String,
         @Body payload: KycPayload
     ): Response<KycResponse>
+
+    @retrofit2.http.PUT("api/mechanics/{id}/payout-details")
+    suspend fun updatePayoutDetails(
+        @Path("id") id: String,
+        @Body payload: PayoutDetailsPayload
+    ): Response<PayoutDetailsResponse>
+
+    @POST("api/mechanics/{id}/redeem")
+    suspend fun redeemPoints(
+        @Path("id") id: String,
+        @Body payload: RedeemPayload
+    ): Response<RedeemResponse>
 }

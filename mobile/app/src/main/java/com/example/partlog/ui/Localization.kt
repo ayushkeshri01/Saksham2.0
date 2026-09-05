@@ -1,6 +1,7 @@
 package com.example.partlog.ui
 
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import com.example.partlog.sync.SarvamTranslator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -220,6 +221,11 @@ object Loc {
 
     private val pendingRequests = mutableSetOf<Pair<AppLanguage, String>>()
 
+    // Snapshot state tracking whether any dynamic translation requests are in flight,
+    // so the UI can show a loader while a language switch settles.
+    var pendingTranslationCount = mutableStateOf(0)
+        private set
+
     fun get(key: String, lang: AppLanguage): String {
         if (lang == AppLanguage.EN) {
             return translations[AppLanguage.EN]?.get(key) ?: key
@@ -249,8 +255,8 @@ object Loc {
     private fun triggerTranslation(key: String, text: String, lang: AppLanguage) {
         val requestKey = Pair(lang, key)
         synchronized(pendingRequests) {
-            if (pendingRequests.contains(requestKey)) return
-            pendingRequests.add(requestKey)
+            if (!pendingRequests.add(requestKey)) return
+            pendingTranslationCount.value++
         }
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -261,17 +267,20 @@ object Loc {
                         dynamicTranslations[lang]?.put(key, translated)
                         synchronized(pendingRequests) {
                             pendingRequests.remove(requestKey)
+                            pendingTranslationCount.value--
                         }
                     }
                 } else {
                     synchronized(pendingRequests) {
                         pendingRequests.remove(requestKey)
+                        pendingTranslationCount.value--
                     }
                 }
             } catch (e: Exception) {
                 Log.e("Loc", "Failed to translate key: $key to lang: ${lang.name}", e)
                 synchronized(pendingRequests) {
                     pendingRequests.remove(requestKey)
+                    pendingTranslationCount.value--
                 }
             }
         }

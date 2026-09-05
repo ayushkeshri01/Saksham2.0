@@ -60,8 +60,8 @@ fun SignUpScreen(
     var agreeToTerms by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
 
-    val widgetId = "36674467416c353436323734"
-    val tokenAuth = "555655TFjBzh4W6a6afe70P1"
+    val widgetId = "366965655632323634373032"
+    val tokenAuth = "567821TECBH4N2ju6a9bada7P1"
     val coroutineScope = rememberCoroutineScope()
     var otpSent by remember { mutableStateOf(false) }
     var reqId by remember { mutableStateOf("") }
@@ -218,7 +218,7 @@ fun SignUpScreen(
             ) {
                 LanguageToggle(
                     currentLanguage = lang,
-                    onLanguageChange = { viewModel.language.value = it }
+                    onLanguageChange = { viewModel.changeLanguage(it) }
                 )
             }
 

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -35,6 +36,34 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
 
     // Language State
     val language = mutableStateOf(AppLanguage.EN)
+
+    // Whether a language switch is in progress (translations still loading)
+    var isLanguageSwitching = mutableStateOf(false)
+        private set
+
+    fun changeLanguage(lang: AppLanguage) {
+        if (lang == language.value) return
+        isLanguageSwitching.value = true
+        language.value = lang
+        viewModelScope.launch {
+            // Let composition re-evaluate Loc.get(...) and fire any Sarvam translation
+            // requests for the new language, then wait for them to settle.
+            delay(150)
+            val start = System.currentTimeMillis()
+            val timeoutMs = 20000L
+            while (Loc.pendingTranslationCount.value > 0 && System.currentTimeMillis() - start < timeoutMs) {
+                delay(100)
+            }
+            // Keep the loader visible briefly even for English/cached languages so the
+            // user notices the switch
+            val minVisibleMs = 600L
+            val visibleMs = System.currentTimeMillis() - start + 150
+            if (visibleMs < minVisibleMs) {
+                delay(minVisibleMs - visibleMs)
+            }
+            isLanguageSwitching.value = false
+        }
+    }
 
     // Current Mechanic Session Flow
     private val currentMechanicId = MutableStateFlow(prefs.getString("mechanic_id", "") ?: "")
@@ -126,6 +155,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
     var mechanicPanNumber = mutableStateOf(prefs.getString("mechanic_pan_number", "") ?: "")
     var mechanicPanStatus = mutableStateOf(prefs.getString("mechanic_pan_status", "NOT_SUBMITTED") ?: "NOT_SUBMITTED")
     var mechanicPanName = mutableStateOf(prefs.getString("mechanic_pan_name", "") ?: "")
+    var payoutMethod = mutableStateOf(prefs.getString("payout_method", "upi") ?: "upi")
+    var upiHandle = mutableStateOf(prefs.getString("upi_handle", "") ?: "")
+    var bankAccountNumber = mutableStateOf(prefs.getString("bank_account_number", "") ?: "")
+    var bankIfsc = mutableStateOf(prefs.getString("bank_ifsc", "") ?: "")
+    var accountHolderName = mutableStateOf(prefs.getString("account_holder_name", "") ?: "")
+    var easebuzzBeneficiaryStatus = mutableStateOf(prefs.getString("easebuzz_beneficiary_status", "NOT_REGISTERED") ?: "NOT_REGISTERED")
 
     val isUserRegistered: Boolean
         get() = mechanicId.value.isNotBlank()
@@ -138,7 +173,13 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
         city: String? = null,
         panNumber: String? = null,
         panStatus: String? = null,
-        panName: String? = null
+        panName: String? = null,
+        payoutMethodIn: String? = null,
+        upiHandleIn: String? = null,
+        bankAccountNumberIn: String? = null,
+        bankIfscIn: String? = null,
+        accountHolderNameIn: String? = null,
+        beneficiaryStatusIn: String? = null
     ) {
         val safeId = id ?: ""
         val safeName = name ?: ""
@@ -148,6 +189,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
         val safePanNumber = panNumber ?: ""
         val safePanStatus = panStatus ?: "NOT_SUBMITTED"
         val safePanName = panName ?: ""
+        val safePayoutMethod = payoutMethodIn ?: "upi"
+        val safeUpiHandle = upiHandleIn ?: ""
+        val safeBankAccountNumber = bankAccountNumberIn ?: ""
+        val safeBankIfsc = bankIfscIn ?: ""
+        val safeAccountHolderName = accountHolderNameIn ?: ""
+        val safeBeneficiaryStatus = beneficiaryStatusIn ?: "NOT_REGISTERED"
         prefs.edit().apply {
             putString("mechanic_id", safeId)
             putString("mechanic_name", safeName)
@@ -157,6 +204,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
             putString("mechanic_pan_number", safePanNumber)
             putString("mechanic_pan_status", safePanStatus)
             putString("mechanic_pan_name", safePanName)
+            putString("payout_method", safePayoutMethod)
+            putString("upi_handle", safeUpiHandle)
+            putString("bank_account_number", safeBankAccountNumber)
+            putString("bank_ifsc", safeBankIfsc)
+            putString("account_holder_name", safeAccountHolderName)
+            putString("easebuzz_beneficiary_status", safeBeneficiaryStatus)
             apply()
         }
         mechanicId.value = safeId
@@ -167,6 +220,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
         mechanicPanNumber.value = safePanNumber
         mechanicPanStatus.value = safePanStatus
         mechanicPanName.value = safePanName
+        payoutMethod.value = safePayoutMethod
+        upiHandle.value = safeUpiHandle
+        bankAccountNumber.value = safeBankAccountNumber
+        bankIfsc.value = safeBankIfsc
+        accountHolderName.value = safeAccountHolderName
+        easebuzzBeneficiaryStatus.value = safeBeneficiaryStatus
         currentMechanicId.value = safeId
     }
 
@@ -259,7 +318,13 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
                             city = mech.city,
                             panNumber = mech.panNumber,
                             panStatus = mech.panStatus,
-                            panName = mech.panName
+                            panName = mech.panName,
+                            payoutMethodIn = mech.payoutMethod,
+                            upiHandleIn = mech.upiHandle,
+                            bankAccountNumberIn = mech.bankAccountNumber,
+                            bankIfscIn = mech.bankIfsc,
+                            accountHolderNameIn = mech.accountHolderName,
+                            beneficiaryStatusIn = mech.easebuzzBeneficiaryStatus
                         )
                         onSuccess()
                     } else {
@@ -302,7 +367,13 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
                             city = mech.city,
                             panNumber = mech.panNumber,
                             panStatus = mech.panStatus,
-                            panName = mech.panName
+                            panName = mech.panName,
+                            payoutMethodIn = mech.payoutMethod,
+                            upiHandleIn = mech.upiHandle,
+                            bankAccountNumberIn = mech.bankAccountNumber,
+                            bankIfscIn = mech.bankIfsc,
+                            accountHolderNameIn = mech.accountHolderName,
+                            beneficiaryStatusIn = mech.easebuzzBeneficiaryStatus
                         )
                         onSuccess()
                     } else {
@@ -345,7 +416,13 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
                             city = mech.city,
                             panNumber = mech.panNumber,
                             panStatus = mech.panStatus,
-                            panName = mech.panName
+                            panName = mech.panName,
+                            payoutMethodIn = mech.payoutMethod,
+                            upiHandleIn = mech.upiHandle,
+                            bankAccountNumberIn = mech.bankAccountNumber,
+                            bankIfscIn = mech.bankIfsc,
+                            accountHolderNameIn = mech.accountHolderName,
+                            beneficiaryStatusIn = mech.easebuzzBeneficiaryStatus
                         )
                         onSuccess()
                     } else {
@@ -402,6 +479,100 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updatePayoutDetails(
+        payoutMethod: String,
+        upiHandle: String? = null,
+        accountHolderName: String? = null,
+        bankAccountNumber: String? = null,
+        bankIfsc: String? = null,
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val retrofit = Retrofit.Builder()
+                    .baseUrl(NetworkConfig.BASE_URL)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                val api = retrofit.create(PartLogApi::class.java)
+
+                val response = api.updatePayoutDetails(
+                    mechanicId.value,
+                    PayoutDetailsPayload(payoutMethod, upiHandle, accountHolderName, bankAccountNumber, bankIfsc)
+                )
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.success && body.mechanic != null) {
+                        val mech = body.mechanic
+                        saveMechanic(
+                            id = mech.id,
+                            name = mech.name,
+                            workshop = mech.workshop,
+                            dob = mech.dob,
+                            city = mech.city,
+                            panNumber = mech.panNumber,
+                            panStatus = mech.panStatus,
+                            panName = mech.panName,
+                            payoutMethodIn = mech.payoutMethod,
+                            upiHandleIn = mech.upiHandle,
+                            bankAccountNumberIn = mech.bankAccountNumber,
+                            bankIfscIn = mech.bankIfsc,
+                            accountHolderNameIn = mech.accountHolderName,
+                            beneficiaryStatusIn = mech.easebuzzBeneficiaryStatus
+                        )
+                        onSuccess()
+                    } else {
+                        onFailure(body?.message ?: "Failed to update payout details")
+                    }
+                } else {
+                    val err = response.errorBody()?.string() ?: "Failed"
+                    onFailure("Failed to update payout details: $err")
+                }
+            } catch (e: Exception) {
+                Log.e("JobViewModel", "Error updating payout details", e)
+                onFailure(e.localizedMessage ?: "Unknown error")
+            }
+        }
+    }
+
+    fun redeemPointsBackend(
+        pointsToRedeem: Int,
+        onSuccess: (message: String, newBalance: Int) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val retrofit = Retrofit.Builder()
+                    .baseUrl(NetworkConfig.BASE_URL)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                val api = retrofit.create(PartLogApi::class.java)
+
+                val response = api.redeemPoints(mechanicId.value, RedeemPayload(pointsToRedeem))
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.success) {
+                        // Update local points cache
+                        val currentRedeemed = prefs.getInt("redeemed_points", 0)
+                        prefs.edit().putInt("redeemed_points", currentRedeemed + pointsToRedeem).apply()
+                        redeemedPoints.value = currentRedeemed + pointsToRedeem
+
+                        onSuccess(body.message ?: "Redemption successful", body.newPointsBalance ?: 0)
+                    } else {
+                        onFailure(body?.message ?: "Redemption failed")
+                    }
+                } else {
+                    val err = try { response.errorBody()?.string() } catch (_: Exception) { null }
+                    val parsed = try { err?.let { com.google.gson.Gson().fromJson(it, com.google.gson.JsonObject::class.java) } } catch (_: Exception) { null }
+                    onFailure(parsed?.get("error")?.asString ?: "Redemption failed: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("JobViewModel", "Error during redemption", e)
+                onFailure(e.localizedMessage ?: "Unknown error")
+            }
+        }
+    }
+
     fun logout() {
         prefs.edit().apply {
             remove("mechanic_id")
@@ -412,6 +583,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
             remove("mechanic_pan_number")
             remove("mechanic_pan_status")
             remove("mechanic_pan_name")
+            remove("payout_method")
+            remove("upi_handle")
+            remove("bank_account_number")
+            remove("bank_ifsc")
+            remove("account_holder_name")
+            remove("easebuzz_beneficiary_status")
             apply()
         }
         mechanicId.value = ""
@@ -422,6 +599,12 @@ class JobViewModel(application: Application) : AndroidViewModel(application) {
         mechanicPanNumber.value = ""
         mechanicPanStatus.value = "NOT_SUBMITTED"
         mechanicPanName.value = ""
+        payoutMethod.value = "upi"
+        upiHandle.value = ""
+        bankAccountNumber.value = ""
+        bankIfsc.value = ""
+        accountHolderName.value = ""
+        easebuzzBeneficiaryStatus.value = "NOT_REGISTERED"
         currentMechanicId.value = ""
     }
 

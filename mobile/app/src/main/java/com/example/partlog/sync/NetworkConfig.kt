@@ -6,8 +6,8 @@ object NetworkConfig {
     // 10.0.2.2 is the standard Android emulator loopback to host machine
     private const val EMULATOR_URL = "http://10.0.2.2:5000/"
 
-    // Connect via the public localtunnel proxy URL which routes to the backend
-    private const val PHYSICAL_DEVICE_URL = "https://saksham-apk-backend.loca.lt/"
+    // Connect via the public HTTPS backend on the Azure VPS (self-signed cert bundled in-app)
+    private const val PHYSICAL_DEVICE_URL = "https://20.219.202.99/"
 
     val BASE_URL: String
         get() {

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const { Client, Pool } = require('pg');
 const cors = require('cors');
@@ -7,8 +8,17 @@ const https = require('https');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const easebuzzService = require('./services/easebuzz');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'saksham_portal_super_secret_key_123';
+
+const DB_CONFIG = {
+    host: process.env.PGHOST || 'localhost',
+    port: parseInt(process.env.PGPORT || '5432', 10),
+    user: process.env.PGUSER || 'postgres',
+    password: process.env.PGPASSWORD || '',
+    database: process.env.PGDATABASE || 'partlog_db'
+};
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,21 +38,24 @@ app.use('/uploads', express.static(uploadsDir));
 async function initDatabase() {
     // 1. Reconnect to postgres default db to create the database if missing
     const defaultClient = new Client({
-        host: 'localhost',
-        user: 'postgres',
-        password: '',
-        port: 5432,
+        host: DB_CONFIG.host,
+        user: DB_CONFIG.user,
+        password: DB_CONFIG.password,
+        port: DB_CONFIG.port,
         database: 'postgres'
     });
 
     try {
         await defaultClient.connect();
-        const res = await defaultClient.query("SELECT 1 FROM pg_database WHERE datname='partlog_db'");
+        const res = await defaultClient.query("SELECT 1 FROM pg_database WHERE datname=$1", [DB_CONFIG.database]);
         if (res.rowCount === 0) {
-            console.log("Database 'partlog_db' does not exist. Creating...");
-            await defaultClient.query("CREATE DATABASE partlog_db");
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(DB_CONFIG.database)) {
+                throw new Error(`Invalid database name: ${DB_CONFIG.database}`);
+            }
+            console.log(`Database '${DB_CONFIG.database}' does not exist. Creating...`);
+            await defaultClient.query(`CREATE DATABASE "${DB_CONFIG.database}"`);
         } else {
-            console.log("Database 'partlog_db' already exists.");
+            console.log(`Database '${DB_CONFIG.database}' already exists.`);
         }
     } catch (err) {
         console.error("Error checking/creating database:", err.message);
@@ -51,13 +64,7 @@ async function initDatabase() {
     }
 
     // 2. Establish connection pool to partlog_db
-    const pool = new Pool({
-        host: 'localhost',
-        user: 'postgres',
-        password: '',
-        port: 5432,
-        database: 'partlog_db'
-    });
+    const pool = new Pool(DB_CONFIG);
 
     // 3. Initialize schema and tables
     const client = await pool.connect();
@@ -127,12 +134,22 @@ async function initDatabase() {
                 notes TEXT,
                 mechanic_id VARCHAR(50) REFERENCES mechanics(id),
                 created_at BIGINT,
-                replacement_count VARCHAR(50)
+                replacement_count VARCHAR(50),
+                brand_installed VARCHAR(100),
+                points_awarded INTEGER
             )
         `);
 
         await client.query(`
             ALTER TABLE condenser_entries ADD COLUMN IF NOT EXISTS replacement_count VARCHAR(50);
+        `);
+
+        await client.query(`
+            ALTER TABLE condenser_entries ADD COLUMN IF NOT EXISTS brand_installed VARCHAR(100);
+        `);
+
+        await client.query(`
+            ALTER TABLE condenser_entries ADD COLUMN IF NOT EXISTS points_awarded INTEGER;
         `);
 
         // Compressor Entries table
@@ -158,12 +175,22 @@ async function initDatabase() {
                 notes TEXT,
                 mechanic_id VARCHAR(50) REFERENCES mechanics(id),
                 created_at BIGINT,
-                current_mileage VARCHAR(50)
+                current_mileage VARCHAR(50),
+                brand_installed VARCHAR(100),
+                points_awarded INTEGER
             )
         `);
 
         await client.query(`
             ALTER TABLE compressor_entries ADD COLUMN IF NOT EXISTS current_mileage VARCHAR(50);
+        `);
+
+        await client.query(`
+            ALTER TABLE compressor_entries ADD COLUMN IF NOT EXISTS brand_installed VARCHAR(100);
+        `);
+
+        await client.query(`
+            ALTER TABLE compressor_entries ADD COLUMN IF NOT EXISTS points_awarded INTEGER;
         `);
 
         // Portal Users table
@@ -188,6 +215,53 @@ async function initDatabase() {
             )
         `);
 
+        // Easebuzz / payout migration columns for mechanics
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS payout_method VARCHAR(20) DEFAULT 'upi';
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS upi_handle VARCHAR(100);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(50);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS bank_ifsc VARCHAR(20);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS account_holder_name VARCHAR(100);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS easebuzz_contact_id VARCHAR(64);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS easebuzz_beneficiary_code VARCHAR(64);
+        `);
+        await client.query(`
+            ALTER TABLE mechanics ADD COLUMN IF NOT EXISTS easebuzz_beneficiary_status VARCHAR(20) DEFAULT 'NOT_REGISTERED';
+        `);
+        await client.query(`
+            UPDATE mechanics SET payout_method = 'upi', easebuzz_beneficiary_status = 'NOT_REGISTERED'
+            WHERE payout_method IS NULL OR easebuzz_beneficiary_status IS NULL;
+        `);
+
+        // Redemption tracking columns
+        await client.query(`
+            ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'PAID';
+        `);
+        await client.query(`
+            ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS easebuzz_transfer_id VARCHAR(64);
+        `);
+        await client.query(`
+            ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS unique_request_number VARCHAR(64);
+        `);
+        await client.query(`
+            ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS payout_method VARCHAR(20);
+        `);
+        await client.query(`
+            ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS payout_destination VARCHAR(120);
+        `);
+
         // Seed default superuser if none exists
         const userCheck = await client.query("SELECT id FROM portal_users WHERE role = 'superuser'");
         if (userCheck.rowCount === 0) {
@@ -201,9 +275,12 @@ async function initDatabase() {
             console.log("Default superuser created successfully.");
         }
 
-        // Clear all previous condenser/compressor entries to start clean
-        await client.query("TRUNCATE TABLE condenser_entries, compressor_entries CASCADE");
-        console.log("Database clean: condenser and compressor logs truncated successfully.");
+        // Wipe any previous condenser/compressor sync data ONLY when explicitly requested (dev/seed mode).
+        // Kept off by default so pm2 restarts on the server never destroy production logs.
+        if (process.env.RESET_ENTRIES_ON_START === 'true') {
+            await client.query("TRUNCATE TABLE condenser_entries, compressor_entries CASCADE");
+            console.log("Database clean: condenser and compressor logs truncated successfully (RESET_ENTRIES_ON_START=true).");
+        }
     } catch (err) {
         console.error("Error creating tables:", err.message);
     } finally {
@@ -255,6 +332,77 @@ function saveBase64Image(base64Data, entryId, slotIndex) {
         console.error(`Failed to save image for ${entryId} slot ${slotIndex}:`, err.message);
         return null;
     }
+}
+
+// Helper to extract the Easebuzz contact id from a createContact response
+function extractContactId(result) {
+    if (!result || !result.data) return null;
+    const d = result.data;
+    return d.contact_id || d.id || (d.contact && d.contact.id) || null;
+}
+
+// Helper to extract the Easebuzz beneficiary code from a createBeneficiary response
+function extractBeneficiaryCode(result) {
+    if (!result || !result.data) return null;
+    const d = result.data;
+    return d.beneficiary_code || d.beneficiary_id || (d.beneficiary && d.beneficiary.beneficiary_code) || d.id || null;
+}
+
+// Generate a 5-32 char alphanumeric unique request number for Easebuzz transfers
+function generateUniqueRequestNumber(mechanicId) {
+    const base = `${String(mechanicId).slice(0, 16).toUpperCase()}${Date.now().toString().slice(-8)}`;
+    const clean = base.replace(/[^A-Z0-9]/g, '');
+    return (clean || 'PARTLOG').slice(0, 32).padEnd(5, '1');
+}
+
+// Ensure a mechanic has an Easebuzz contact + beneficiary, and store the codes
+async function ensureEasebuzzBeneficiary(mechanic, client) {
+    let contactId = mechanic.easebuzz_contact_id;
+    let beneficiaryCode = mechanic.easebuzz_beneficiary_code;
+
+    if (!contactId) {
+        const contactRes = await easebuzzService.createContact({ name: mechanic.name, email: '', phone: mechanic.mobile });
+        contactId = extractContactId(contactRes);
+        if (!contactId) {
+            throw new Error('Easebuzz did not return a contact id');
+        }
+        await client.query("UPDATE mechanics SET easebuzz_contact_id = $1 WHERE id = $2", [contactId, mechanic.id]);
+    }
+
+    if (!beneficiaryCode) {
+        const payoutMethod = (mechanic.payout_method || 'upi').toLowerCase();
+        let benRes;
+        if (payoutMethod === 'bank') {
+            benRes = await easebuzzService.createBeneficiary({
+                contact_id: contactId,
+                beneficiary_type: 'bank_account',
+                beneficiary_name: mechanic.account_holder_name,
+                account_number: mechanic.bank_account_number,
+                ifsc: mechanic.bank_ifsc,
+                upi_handle: '',
+            });
+        } else {
+            benRes = await easebuzzService.createBeneficiary({
+                contact_id: contactId,
+                beneficiary_type: 'upi',
+                beneficiary_name: mechanic.name,
+                account_number: '',
+                ifsc: '',
+                upi_handle: mechanic.upi_handle,
+            });
+        }
+        beneficiaryCode = extractBeneficiaryCode(benRes);
+        if (!beneficiaryCode) {
+            throw new Error('Easebuzz did not return a beneficiary code');
+        }
+        await client.query(`
+            UPDATE mechanics
+            SET easebuzz_beneficiary_code = $1, easebuzz_beneficiary_status = 'REGISTERED'
+            WHERE id = $2
+        `, [beneficiaryCode, mechanic.id]);
+    }
+
+    return { contactId, beneficiaryCode };
 }
 
 // ----------------------------------------
@@ -324,7 +472,9 @@ app.post('/api/mechanics/login', async (req, res) => {
     try {
         console.log(`Login attempt for mechanic: ${id}`);
         let result = await dbPool.query(`
-            SELECT id, name, workshop, mobile, password, points, dob, city, pan_number, pan_status, pan_name FROM mechanics WHERE mobile = $1 OR id = $1
+            SELECT id, name, workshop, mobile, password, points, dob, city, pan_number, pan_status, pan_name,
+                   payout_method, upi_handle, bank_account_number, bank_ifsc, account_holder_name,
+                   easebuzz_beneficiary_code, easebuzz_beneficiary_status FROM mechanics WHERE mobile = $1 OR id = $1
         `, [id]);
 
         if (id === '7482868689' || result.rows.some(r => r.mobile === '7482868689' || r.id === '7482868689')) {
@@ -342,7 +492,13 @@ app.post('/api/mechanics/login', async (req, res) => {
                     city: testMechanic ? testMechanic.city : 'Faridabad',
                     panNumber: testMechanic ? testMechanic.pan_number : 'ABCDE1234F',
                     panStatus: testMechanic ? testMechanic.pan_status : 'VERIFIED',
-                    panName: testMechanic ? testMechanic.pan_name : 'AYUSH KUMAR'
+                    panName: testMechanic ? testMechanic.pan_name : 'AYUSH KUMAR',
+                    payoutMethod: testMechanic ? testMechanic.payout_method : 'upi',
+                    upiHandle: testMechanic ? testMechanic.upi_handle : '',
+                    bankAccountNumber: testMechanic ? testMechanic.bank_account_number : '',
+                    bankIfsc: testMechanic ? testMechanic.bank_ifsc : '',
+                    accountHolderName: testMechanic ? testMechanic.account_holder_name : '',
+                    easebuzzBeneficiaryStatus: testMechanic ? testMechanic.easebuzz_beneficiary_status : 'NOT_REGISTERED'
                 }
             });
         }
@@ -368,7 +524,13 @@ app.post('/api/mechanics/login', async (req, res) => {
                 city: mechanic.city,
                 panNumber: mechanic.pan_number,
                 panStatus: mechanic.pan_status,
-                panName: mechanic.pan_name
+                panName: mechanic.pan_name,
+                payoutMethod: mechanic.payout_method,
+                upiHandle: mechanic.upi_handle,
+                bankAccountNumber: mechanic.bank_account_number,
+                bankIfsc: mechanic.bank_ifsc,
+                accountHolderName: mechanic.account_holder_name,
+                easebuzzBeneficiaryStatus: mechanic.easebuzz_beneficiary_status
             }
         });
     } catch (err) {
@@ -394,7 +556,7 @@ app.post('/api/mechanics/login-otp', async (req, res) => {
             // Call MSG91 verifyAccessToken API
             verifiedResult = await new Promise((resolve, reject) => {
                 const postData = JSON.stringify({
-                    "authkey": "555655TFjBzh4W6a6afe70P1",
+                    "authkey": process.env.MSG91_AUTHKEY || "567821TECBH4N2ju6a9bada7P1",
                     "access-token": accessToken
                 });
 
@@ -448,7 +610,9 @@ app.post('/api/mechanics/login-otp', async (req, res) => {
 
         console.log(`Searching for mechanic with mobile: ${targetMobile} or ${cleanMobile}`);
         let dbRes = await dbPool.query(`
-            SELECT id, name, workshop, mobile, points, dob, city, pan_number, pan_status, pan_name FROM mechanics WHERE mobile = $1 OR mobile = $2
+            SELECT id, name, workshop, mobile, points, dob, city, pan_number, pan_status, pan_name,
+                   payout_method, upi_handle, bank_account_number, bank_ifsc, account_holder_name,
+                   easebuzz_beneficiary_code, easebuzz_beneficiary_status FROM mechanics WHERE mobile = $1 OR mobile = $2
         `, [targetMobile, cleanMobile]);
 
         if (dbRes.rowCount === 0) {
@@ -468,7 +632,13 @@ app.post('/api/mechanics/login-otp', async (req, res) => {
                 city: mechanic.city,
                 panNumber: mechanic.pan_number,
                 panStatus: mechanic.pan_status,
-                panName: mechanic.pan_name
+                panName: mechanic.pan_name,
+                payoutMethod: mechanic.payout_method,
+                upiHandle: mechanic.upi_handle,
+                bankAccountNumber: mechanic.bank_account_number,
+                bankIfsc: mechanic.bank_ifsc,
+                accountHolderName: mechanic.account_holder_name,
+                easebuzzBeneficiaryStatus: mechanic.easebuzz_beneficiary_status
             }
         });
     } catch (err) {
@@ -486,13 +656,6 @@ app.post('/api/sync', async (req, res) => {
     }
 
     try {
-        // Check if entry already exists to avoid duplicate work / insertions
-        const checkRes = await dbPool.query("SELECT id FROM condenser_entries WHERE id = $1", [entry.id]);
-        if (checkRes.rowCount > 0) {
-            console.log(`Entry ${entry.id} already exists. Skipping insertion.`);
-            return res.status(200).json({ success: true, message: "Already synced" });
-        }
-
         console.log(`Syncing new entry: ${entry.id} (${entry.make} ${entry.model})`);
 
         // Save photos and get paths
@@ -500,30 +663,41 @@ app.post('/api/sync', async (req, res) => {
         const path2 = saveBase64Image(entry.photoBase64_2, entry.id, 2);
         const path3 = saveBase64Image(entry.photoBase64_3, entry.id, 3);
 
-        // Insert into database
-        await dbPool.query(`
+        // Compute brand + points once, before insert, and store them on the row
+        const brandInstalled = entry.brandInstalled && entry.brandInstalled.trim() ? entry.brandInstalled.trim() : null;
+        const isPranav = brandInstalled && brandInstalled.toLowerCase() === 'pranav';
+        const pointsToAward = isPranav ? 20 : 10;
+
+        // Insert into database. ON CONFLICT DO NOTHING makes this atomic and
+        // idempotent so concurrent/retried syncs cannot duplicate the row.
+        const insertRes = await dbPool.query(`
             INSERT INTO condenser_entries (
                 id, make, model, variant, year, registration_number,
                 photo_url_1, photo_url_2, photo_url_3,
                 gps_lat, gps_lng, timestamp, failure_cause, severity,
-                odometer, ac_usage, prior_service_date, notes, mechanic_id, created_at, replacement_count
+                odometer, ac_usage, prior_service_date, notes, mechanic_id, created_at, replacement_count,
+                brand_installed, points_awarded
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
             )
+            ON CONFLICT (id) DO NOTHING
         `, [
             entry.id, entry.make, entry.model, entry.variant, entry.year, entry.registrationNumber,
             path1, path2, path3,
             entry.gpsLatitude, entry.gpsLongitude, entry.timestamp, entry.failureCause, entry.severity,
             entry.odometer, entry.acUsage, entry.priorServiceDate, entry.notes, entry.mechanicId, entry.createdAt,
-            entry.condenserReplacementCount || null
+            entry.condenserReplacementCount || null,
+            brandInstalled, pointsToAward
         ]);
 
-        // Award points (+10 or +20 if pranav condenser) to the logging mechanic
-        const isPranav = entry.brandInstalled && entry.brandInstalled.toLowerCase() === 'pranav';
-        const pointsToAward = isPranav ? 20 : 10;
-        await dbPool.query("UPDATE mechanics SET points = points + $1 WHERE id = $2", [pointsToAward, entry.mechanicId]);
+        // Award points ONLY when this request actually inserted a new row
+        // (rowCount === 1). Duplicate/retried syncs (rowCount === 0) do not
+        // re-award points.
+        if (insertRes.rowCount === 1) {
+            await dbPool.query("UPDATE mechanics SET points = points + $1 WHERE id = $2", [pointsToAward, entry.mechanicId]);
+        }
 
-        res.status(201).json({ success: true, id: entry.id });
+        res.status(insertRes.rowCount === 1 ? 201 : 200).json({ success: true, id: entry.id });
     } catch (err) {
         console.error("Error during sync operation:", err.message);
         res.status(500).json({ error: "Internal server error" });
@@ -618,6 +792,182 @@ app.post('/api/mechanics/:id/kyc', async (req, res) => {
     }
 });
 
+// Mechanic Payout Details Endpoint (UPI or Bank)
+app.put('/api/mechanics/:id/payout-details', async (req, res) => {
+    const { id } = req.params;
+    const { payoutMethod, upiHandle, accountHolderName, bankAccountNumber, bankIfsc } = req.body || {};
+
+    if (!id) {
+        return res.status(400).json({ error: "Mechanic ID is required" });
+    }
+
+    const method = (payoutMethod || 'upi').toLowerCase();
+    if (method !== 'upi' && method !== 'bank') {
+        return res.status(400).json({ error: "payoutMethod must be 'upi' or 'bank'" });
+    }
+
+    if (method === 'upi' && (!upiHandle || !/^[^\s@]+@[^\s@]+$/.test(upiHandle))) {
+        return res.status(400).json({ error: "A valid UPI handle (e.g. name@okhdfcbank) is required" });
+    }
+    if (method === 'bank' && (!accountHolderName || !bankAccountNumber || !bankIfsc)) {
+        return res.status(400).json({ error: "Account holder name, account number, and IFSC are required for bank payouts" });
+    }
+
+    try {
+        console.log(`Saving payout details for mechanic ${id}: method=${method}`);
+        const updateRes = await dbPool.query(`
+            UPDATE mechanics
+            SET payout_method = $1,
+                upi_handle = $2,
+                bank_account_number = $3,
+                bank_ifsc = $4,
+                account_holder_name = $5,
+                easebuzz_beneficiary_code = NULL,
+                easebuzz_beneficiary_status = 'NOT_REGISTERED'
+            WHERE id = $6
+            RETURNING id, name, payout_method, upi_handle, bank_account_number, bank_ifsc, account_holder_name,
+                      easebuzz_beneficiary_code, easebuzz_beneficiary_status
+        `, [
+            method,
+            method === 'upi' ? upiHandle : null,
+            method === 'bank' ? bankAccountNumber : null,
+            method === 'bank' ? bankIfsc : null,
+            method === 'bank' ? accountHolderName : null,
+            id
+        ]);
+
+        if (updateRes.rowCount === 0) {
+            return res.status(404).json({ error: "Mechanic not found" });
+        }
+
+        res.json({ success: true, message: "Payout details saved successfully", mechanic: updateRes.rows[0] });
+    } catch (err) {
+        console.error("Error saving payout details:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Mechanic Auto-Redemption Endpoint (requests payout directly via Easebuzz)
+app.post('/api/mechanics/:id/redeem', async (req, res) => {
+    const { id } = req.params;
+    const { pointsToRedeem } = req.body || {};
+    const pts = parseInt(pointsToRedeem, 10);
+
+    if (!id) {
+        return res.status(400).json({ error: "Mechanic ID is required" });
+    }
+    if (isNaN(pts) || pts <= 0) {
+        return res.status(400).json({ error: "Points to redeem must be a positive integer" });
+    }
+
+    try {
+        const mechRes = await dbPool.query(`
+            SELECT id, name, mobile, points, pan_status,
+                   payout_method, upi_handle, bank_account_number, bank_ifsc, account_holder_name,
+                   easebuzz_contact_id, easebuzz_beneficiary_code
+            FROM mechanics WHERE id = $1
+        `, [id]);
+
+        if (mechRes.rowCount === 0) {
+            return res.status(404).json({ error: "Mechanic not found" });
+        }
+
+        const mechanic = mechRes.rows[0];
+
+        if (mechanic.pan_status !== 'VERIFIED') {
+            return res.status(400).json({ error: "KYC verification is required before redeeming points." });
+        }
+        if (pts < 100) {
+            return res.status(400).json({ error: "Minimum redemption is 100 points." });
+        }
+        if (mechanic.points < pts) {
+            return res.status(400).json({ error: `Insufficient points. Mechanic has only ${mechanic.points} points.` });
+        }
+
+        const payoutMethod = (mechanic.payout_method || 'upi').toLowerCase();
+        let payoutDestination;
+        if (payoutMethod === 'bank') {
+            payoutDestination = `${mechanic.account_holder_name}|${mechanic.bank_account_number}|${mechanic.bank_ifsc}`;
+        } else {
+            payoutDestination = mechanic.upi_handle || '';
+        }
+        if (!payoutDestination) {
+            return res.status(400).json({ error: "Payout details are not set. Add your UPI or bank details in Profile first." });
+        }
+
+        if (!easebuzzService.isConfigured()) {
+            return res.status(503).json({ error: "Easebuzz auto-payout is not configured by the operator yet." });
+        }
+
+        // Ensure contact + beneficiary exist in Easebuzz
+        let codes;
+        try {
+            codes = await ensureEasebuzzBeneficiary(mechanic, dbPool);
+        } catch (benefitErr) {
+            console.error("Error registering Easebuzz beneficiary:", benefitErr.message);
+            return res.status(502).json({ error: "Failed to register payout beneficiary: " + benefitErr.message });
+        }
+
+        const uniqueRequestNumber = generateUniqueRequestNumber(mechanic.id);
+        const amount = easebuzzService.formatAmount(pts);
+
+        // Initiate the Easebuzz transfer
+        let transfer;
+        try {
+            transfer = await easebuzzService.initiateTransfer({
+                beneficiary_code: codes.beneficiaryCode,
+                unique_request_number: uniqueRequestNumber,
+                amount,
+                payment_mode: payoutMethod === 'bank' ? 'IMPS' : 'UPI',
+                narration: `Points redemption for mechanic ${mechanic.id}`,
+                udf1: String(mechanic.id),
+                udf2: String(pts),
+            });
+        } catch (transferErr) {
+            console.error("Easebuzz transfer connection error:", transferErr.message);
+            return res.status(502).json({ error: "Easebuzz transfer failed: " + transferErr.message });
+        }
+
+        if (!transfer.success) {
+            console.error("Easebuzz transfer error:", transfer.message, JSON.stringify(transfer.data));
+            return res.status(502).json({ error: "Easebuzz transfer failed: " + (transfer.message || JSON.stringify(transfer.data)) });
+        }
+
+        const transferRequest = transfer.data && transfer.data.transfer_request;
+        const transferId = transferRequest ? transferRequest.id : null;
+        const reqNumber = transferRequest && transferRequest.unique_request_number ? transferRequest.unique_request_number : uniqueRequestNumber;
+        const transferStatus = transferRequest ? transferRequest.status : 'accepted';
+
+        // Deduct points and record redemption (status PAID)
+        await dbPool.query("BEGIN");
+        try {
+            await dbPool.query("UPDATE mechanics SET points = points - $1 WHERE id = $2", [pts, mechanic.id]);
+
+            const redemptionId = crypto.randomBytes(16).toString('hex');
+            await dbPool.query(`
+                INSERT INTO redemptions (id, mechanic_id, points_redeemed, amount_redeemed, created_at, status,
+                                         easebuzz_transfer_id, unique_request_number, payout_method, payout_destination)
+                VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7, $8, $9)
+            `, [redemptionId, mechanic.id, pts, pts, Date.now(), transferId, reqNumber, payoutMethod, payoutDestination]);
+
+            await dbPool.query("COMMIT");
+
+            res.json({
+                success: true,
+                message: `Redemption of ${pts} points (₹${pts}) processed successfully via Easebuzz.`,
+                newPointsBalance: mechanic.points - pts,
+                transfer: { transferId, status: transferStatus, uniqueRequestNumber: reqNumber }
+            });
+        } catch (err) {
+            await dbPool.query("ROLLBACK");
+            throw err;
+        }
+    } catch (err) {
+        console.error("Error during mechanic auto-redemption:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // Sync Compressor Endpoint (Implements sync push for compressors)
 app.post('/api/compressor/sync', async (req, res) => {
     const entry = req.body;
@@ -627,13 +977,6 @@ app.post('/api/compressor/sync', async (req, res) => {
     }
 
     try {
-        // Check if entry already exists
-        const checkRes = await dbPool.query("SELECT id FROM compressor_entries WHERE id = $1", [entry.id]);
-        if (checkRes.rowCount > 0) {
-            console.log(`Compressor entry ${entry.id} already exists. Skipping insertion.`);
-            return res.status(200).json({ success: true, message: "Already synced" });
-        }
-
         console.log(`Syncing new compressor entry: ${entry.id} (${entry.make} ${entry.model})`);
 
         // Save photos and get paths
@@ -641,31 +984,39 @@ app.post('/api/compressor/sync', async (req, res) => {
         const path2 = saveBase64Image(entry.photoBase64_2, entry.id, 2);
         const path3 = saveBase64Image(entry.photoBase64_3, entry.id, 3);
 
-        // Insert into database
-        await dbPool.query(`
+        // Compute brand + points once, before insert, and store them on the row
+        const brandInstalled = entry.brandInstalled && entry.brandInstalled.trim() ? entry.brandInstalled.trim() : null;
+        const isSanden = brandInstalled && brandInstalled.toLowerCase() === 'sanden';
+        const pointsToAward = isSanden ? 20 : 10;
+
+        // Insert into database. ON CONFLICT DO NOTHING makes this atomic and
+        // idempotent so concurrent/retried syncs cannot duplicate the row.
+        const insertRes = await dbPool.query(`
             INSERT INTO compressor_entries (
                 id, make, model, variant, year, registration_number,
                 photo_url_1, photo_url_2, photo_url_3,
                 gps_lat, gps_lng, timestamp, failure_cause, severity,
                 odometer, ac_usage, prior_service_date, notes, mechanic_id, created_at,
-                current_mileage
+                current_mileage, brand_installed, points_awarded
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
             )
+            ON CONFLICT (id) DO NOTHING
         `, [
             entry.id, entry.make, entry.model, entry.variant, entry.year, entry.registrationNumber,
             path1, path2, path3,
             entry.gpsLatitude, entry.gpsLongitude, entry.timestamp, entry.failureCause, entry.severity,
             entry.odometer, entry.acUsage, entry.priorServiceDate, entry.notes, entry.mechanicId, entry.createdAt,
-            entry.currentMileage || null
+            entry.currentMileage || null,
+            brandInstalled, pointsToAward
         ]);
 
-        // Award points (+10 or +20 if sanden compressor) to the logging mechanic
-        const isSanden = entry.brandInstalled && entry.brandInstalled.toLowerCase() === 'sanden';
-        const pointsToAward = isSanden ? 20 : 10;
-        await dbPool.query("UPDATE mechanics SET points = points + $1 WHERE id = $2", [pointsToAward, entry.mechanicId]);
+        // Award points ONLY when this request actually inserted a new row.
+        if (insertRes.rowCount === 1) {
+            await dbPool.query("UPDATE mechanics SET points = points + $1 WHERE id = $2", [pointsToAward, entry.mechanicId]);
+        }
 
-        res.status(201).json({ success: true, id: entry.id });
+        res.status(insertRes.rowCount === 1 ? 201 : 200).json({ success: true, id: entry.id });
     } catch (err) {
         console.error("Error during compressor sync operation:", err.message);
         res.status(500).json({ error: "Internal server error" });
@@ -815,6 +1166,14 @@ app.get('/api/portal/mechanics', authenticateToken, async (req, res) => {
                 m.pan_number,
                 m.pan_status,
                 m.pan_name,
+                m.payout_method,
+                m.upi_handle,
+                m.bank_account_number,
+                m.bank_ifsc,
+                m.account_holder_name,
+                m.easebuzz_contact_id,
+                m.easebuzz_beneficiary_code,
+                m.easebuzz_beneficiary_status,
                 COALESCE((SELECT SUM(points_redeemed) FROM redemptions WHERE mechanic_id = m.id), 0) as total_points_redeemed,
                 COALESCE((SELECT SUM(amount_redeemed) FROM redemptions WHERE mechanic_id = m.id), 0.0) as total_amount_redeemed
             FROM mechanics m
@@ -841,12 +1200,18 @@ app.post('/api/portal/redeem', authenticateToken, async (req, res) => {
     }
 
     try {
-        const mechRes = await dbPool.query("SELECT points, pan_status FROM mechanics WHERE id = $1", [mechanicId]);
+        const mechRes = await dbPool.query(`
+            SELECT id, name, mobile, points, pan_status, payout_method, upi_handle,
+                   bank_account_number, bank_ifsc, account_holder_name,
+                   easebuzz_contact_id, easebuzz_beneficiary_code, easebuzz_beneficiary_status
+            FROM mechanics WHERE id = $1
+        `, [mechanicId]);
         if (mechRes.rowCount === 0) {
             return res.status(404).json({ error: "Mechanic not found" });
         }
 
-        const { points: availablePoints, pan_status: panStatus } = mechRes.rows[0];
+        const mechanic = mechRes.rows[0];
+        const { points: availablePoints, pan_status: panStatus } = mechanic;
         if (panStatus !== 'VERIFIED') {
             return res.status(400).json({ error: "Redemption blocked. Mechanic KYC status is not VERIFIED." });
         }
@@ -855,17 +1220,47 @@ app.post('/api/portal/redeem', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `Insufficient points. Mechanic has only ${availablePoints} points.` });
         }
 
-        // --- Easebuzz Payout API Integration Hook ---
-        // Once Easebuzz credentials and wire API are provided, implement the API call here:
-        // const easebuzzPayout = await EasebuzzService.triggerPayout({
-        //     mechanicId,
-        //     amount: pts, // ₹1 = 1 point
-        //     accountDetails: ...
-        // });
-        // if (!easebuzzPayout.success) {
-        //     return res.status(500).json({ error: "Easebuzz transfer failed: " + easebuzzPayout.message });
-        // }
-        // ---------------------------------------------
+        const amount = pts; // Conversion rate: 1 pt = ₹1
+
+        // Unique request number for the Easebuzz transfer (5-32 alphanumeric)
+        const uniqueRequestNumber = generateUniqueRequestNumber(mechanicId);
+
+        // --- Easebuzz Payout API Integration ---
+        const beneficiaryCode = req.body.beneficiary_code || mechanic.easebuzz_beneficiary_code || null;
+        const payoutMethod = (mechanic.payout_method || req.body.payment_mode || 'upi').toLowerCase();
+        let easebuzzResult = null;
+        let redemptionStatus = 'PENDING';
+
+        if (beneficiaryCode && easebuzzService.isConfigured()) {
+            try {
+                easebuzzResult = await easebuzzService.initiateTransfer({
+                    beneficiary_code: beneficiaryCode,
+                    unique_request_number: uniqueRequestNumber,
+                    amount: easebuzzService.formatAmount(pts),
+                    payment_mode: req.body.payment_mode || (payoutMethod === 'bank' ? 'IMPS' : 'UPI'),
+                    narration: req.body.narration || `Points redemption for mechanic ${mechanicId}`,
+                    udf1: String(mechanicId),
+                    udf2: String(pts),
+                });
+            } catch (easebuzzErr) {
+                return res.status(500).json({ error: "Easebuzz transfer failed: " + easebuzzErr.message });
+            }
+
+            if (!easebuzzResult.success) {
+                return res.status(500).json({ error: "Easebuzz transfer failed: " + (easebuzzResult.message || JSON.stringify(easebuzzResult.data)) });
+            }
+
+            redemptionStatus = 'PAID';
+        } else if (!easebuzzService.isConfigured()) {
+            // Easebuzz not configured: record pending redemption (manual payout later)
+            redemptionStatus = 'PENDING';
+        } else {
+            return res.status(400).json({ error: "Mechanic has no registered Easebuzz beneficiary. Register one first." });
+        }
+
+        const transferRequest = easebuzzResult && easebuzzResult.data ? easebuzzResult.data.transfer_request : null;
+        const transferId = transferRequest ? transferRequest.id : null;
+        const reqNumber = transferRequest && transferRequest.unique_request_number ? transferRequest.unique_request_number : uniqueRequestNumber;
 
         // Deduct points and insert redemption log
         await dbPool.query("BEGIN");
@@ -873,23 +1268,96 @@ app.post('/api/portal/redeem', authenticateToken, async (req, res) => {
         await dbPool.query("UPDATE mechanics SET points = points - $1 WHERE id = $2", [pts, mechanicId]);
         
         const redemptionId = crypto.randomBytes(16).toString('hex');
-        const amount = pts; // Conversion rate: 1 pt = ₹1
         await dbPool.query(`
-            INSERT INTO redemptions (id, mechanic_id, points_redeemed, amount_redeemed, created_at)
-            VALUES ($1, $2, $3, $4, $5)
-        `, [redemptionId, mechanicId, pts, amount, Date.now()]);
+            INSERT INTO redemptions (id, mechanic_id, points_redeemed, amount_redeemed, created_at, status,
+                                     easebuzz_transfer_id, unique_request_number, payout_method, payout_destination)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [redemptionId, mechanicId, pts, amount, Date.now(), redemptionStatus, transferId, reqNumber, payoutMethod,
+            payoutMethod === 'bank' ? `${mechanic.account_holder_name}|${mechanic.bank_account_number}|${mechanic.bank_ifsc}` : mechanic.upi_handle]);
         
         await dbPool.query("COMMIT");
 
         res.json({
             success: true,
             message: `Redeemed ${pts} points (₹${amount}) successfully.`,
-            newPointsBalance: availablePoints - pts
+            newPointsBalance: availablePoints - pts,
+            status: redemptionStatus,
+            easebuzzTransfer: easebuzzResult ? {
+                success: easebuzzResult.success,
+                transferId,
+                uniqueRequestNumber: reqNumber,
+            } : null
         });
     } catch (err) {
-        if (dbPool) await dbPool.query("ROLLBACK");
+        if (dbPool) await dbPool.query("ROLLBACK").catch(() => {});
         console.error("Error during redemption:", err.message);
         res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Admin endpoint to register a mechanic's Easebuzz beneficiary (contact + beneficiary code)
+app.post('/api/portal/mechanics/:id/register-beneficiary', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { payoutMethod, upiHandle, accountHolderName, bankAccountNumber, bankIfsc } = req.body || {};
+
+    if (!id) {
+        return res.status(400).json({ error: "Mechanic ID is required" });
+    }
+
+    try {
+        const mechRes = await dbPool.query(`
+            SELECT id, name, mobile, payout_method, upi_handle, bank_account_number, bank_ifsc,
+                   account_holder_name, easebuzz_contact_id, easebuzz_beneficiary_code, easebuzz_beneficiary_status
+            FROM mechanics WHERE id = $1
+        `, [id]);
+        if (mechRes.rowCount === 0) {
+            return res.status(404).json({ error: "Mechanic not found" });
+        }
+
+        let mechanic = mechRes.rows[0];
+
+        // Optionally update payout details first
+        const method = payoutMethod ? String(payoutMethod).toLowerCase() : (mechanic.payout_method || 'upi');
+        if (payoutMethod || upiHandle || bankAccountNumber || accountHolderName || bankIfsc) {
+            if (method !== 'upi' && method !== 'bank') {
+                return res.status(400).json({ error: "payoutMethod must be 'upi' or 'bank'" });
+            }
+            if (method === 'upi' && !upiHandle) {
+                return res.status(400).json({ error: "UPI handle is required for UPI payouts" });
+            }
+            if (method === 'bank' && (!accountHolderName || !bankAccountNumber || !bankIfsc)) {
+                return res.status(400).json({ error: "Account holder name, account number, and IFSC are required for bank payouts" });
+            }
+            await dbPool.query(`
+                UPDATE mechanics
+                SET payout_method = $1, upi_handle = $2, bank_account_number = $3, bank_ifsc = $4, account_holder_name = $5,
+                    easebuzz_beneficiary_code = NULL, easebuzz_beneficiary_status = 'NOT_REGISTERED'
+                WHERE id = $6
+            `, [method,
+                method === 'upi' ? upiHandle : null,
+                method === 'bank' ? bankAccountNumber : null,
+                method === 'bank' ? bankIfsc : null,
+                method === 'bank' ? accountHolderName : null,
+                id]);
+            mechanic = { ...mechanic, payout_method: method, upi_handle: method === 'upi' ? upiHandle : mechanic.upi_handle };
+        }
+
+        if (!easebuzzService.isConfigured()) {
+            return res.status(503).json({ error: "Easebuzz payout credentials are not configured. Set EASEBUZZ_WIRE_KEY and EASEBUZZ_WIRE_SALT." });
+        }
+
+        const codes = await ensureEasebuzzBeneficiary(mechanic, dbPool);
+
+        res.json({
+            success: true,
+            message: "Easebuzz beneficiary registered successfully.",
+            contactId: codes.contactId,
+            beneficiaryCode: codes.beneficiaryCode,
+            mechanicId: id
+        });
+    } catch (err) {
+        console.error("Error registering Easebuzz beneficiary:", err.message);
+        res.status(500).json({ error: "Failed to register Easebuzz beneficiary: " + err.message });
     }
 });
 
@@ -898,7 +1366,8 @@ app.get('/api/portal/mechanics/:id/redemptions', authenticateToken, async (req, 
     const { id } = req.params;
     try {
         const result = await dbPool.query(`
-            SELECT id, points_redeemed, amount_redeemed, created_at
+            SELECT id, points_redeemed, amount_redeemed, created_at, status,
+                   easebuzz_transfer_id, unique_request_number, payout_method, payout_destination
             FROM redemptions
             WHERE mechanic_id = $1
             ORDER BY created_at DESC

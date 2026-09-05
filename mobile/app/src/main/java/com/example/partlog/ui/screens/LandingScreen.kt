@@ -70,7 +70,7 @@ fun LandingScreen(
         ) {
             LanguageToggle(
                 currentLanguage = lang,
-                onLanguageChange = { viewModel.language.value = it }
+                onLanguageChange = { viewModel.changeLanguage(it) }
             )
         }
 

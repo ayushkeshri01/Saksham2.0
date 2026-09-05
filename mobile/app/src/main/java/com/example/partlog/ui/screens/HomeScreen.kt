@@ -63,6 +63,7 @@ fun HomeScreen(
     var activeTab by remember { mutableStateOf("dashboard") }
     var showRedeemDialog by remember { mutableStateOf(false) }
     var showKycDialog by remember { mutableStateOf(false) }
+    var redeeming by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -173,10 +174,33 @@ fun HomeScreen(
                     availablePoints = availablePoints,
                     lang = lang,
                     onDismiss = { showRedeemDialog = false },
-                    onRedeem = { ptsToRedeem ->
-                        viewModel.redeemPoints(ptsToRedeem)
-                        showRedeemDialog = false
-                        Toast.makeText(context, Loc.get("Redemption request of ₹$ptsToRedeem submitted successfully!", lang), Toast.LENGTH_LONG).show()
+                    onRedeem = { ptsToRedeem, method, upiId, holderName, acctNumber, ifscCode ->
+                        redeeming = true
+                        viewModel.updatePayoutDetails(
+                            payoutMethod = method,
+                            upiHandle = upiId.ifBlank { null },
+                            accountHolderName = holderName.ifBlank { null },
+                            bankAccountNumber = acctNumber.ifBlank { null },
+                            bankIfsc = ifscCode.ifBlank { null },
+                            onSuccess = {
+                                viewModel.redeemPointsBackend(
+                                    pointsToRedeem = ptsToRedeem,
+                                    onSuccess = { message, _ ->
+                                        redeeming = false
+                                        showRedeemDialog = false
+                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                    },
+                                    onFailure = { error ->
+                                        redeeming = false
+                                        Toast.makeText(context, "Redemption failed: $error", Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            },
+                            onFailure = { error ->
+                                redeeming = false
+                                Toast.makeText(context, "Failed to save payout details: $error", Toast.LENGTH_LONG).show()
+                            }
+                        )
                     }
                 )
             }
@@ -844,7 +868,7 @@ fun ProfileView(
                     Text(text = Loc.get("App Language", lang), color = Color.Gray, fontSize = 14.sp)
                     LanguageToggle(
                         currentLanguage = viewModel.language.value,
-                        onLanguageChange = { viewModel.language.value = it }
+                        onLanguageChange = { viewModel.changeLanguage(it) }
                     )
                 }
             }
@@ -930,6 +954,76 @@ fun ProfileView(
                         modifier = Modifier.fillMaxWidth().height(38.dp)
                     ) {
                         Text(Loc.get("kyc_verify_btn", lang), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // Payout Details Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFFDDE1E7), RoundedCornerShape(12.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = Loc.get("Payout Details", lang),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color(0xFF023F97)
+                    )
+                    val beneficiaryStatus = viewModel.easebuzzBeneficiaryStatus.value
+                    val badgeColor = if (beneficiaryStatus == "REGISTERED") Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                    val badgeTextColor = if (beneficiaryStatus == "REGISTERED") Color(0xFF2E7D32) else Color(0xFFEF6C00)
+                    Box(
+                        modifier = Modifier
+                            .background(badgeColor, shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = beneficiaryStatus,
+                            color = badgeTextColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
+                ProfileRow(Loc.get("Payout Method", lang), viewModel.payoutMethod.value.uppercase())
+                HorizontalDivider()
+
+                if (viewModel.payoutMethod.value == "upi") {
+                    ProfileRow(Loc.get("UPI Handle", lang), viewModel.upiHandle.value.ifBlank { "Not set" })
+                } else {
+                    ProfileRow(Loc.get("Account Holder", lang), viewModel.accountHolderName.value.ifBlank { "Not set" })
+                    HorizontalDivider()
+                    val maskedAc = viewModel.bankAccountNumber.value.let { ac ->
+                        if (ac.length > 4) "XXXX${ac.takeLast(4)}" else ac.ifBlank { "Not set" }
+                    }
+                    ProfileRow(Loc.get("Bank Account", lang), maskedAc)
+                    HorizontalDivider()
+                    ProfileRow(Loc.get("IFSC", lang), viewModel.bankIfsc.value.ifBlank { "Not set" })
+                }
+
+                if (viewModel.easebuzzBeneficiaryStatus.value != "REGISTERED" && viewModel.mechanicPanStatus.value == "VERIFIED") {
+                    Button(
+                        onClick = onRedeemClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF023F97)),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().height(38.dp)
+                    ) {
+                        Text("Set Payout Details", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                 }
             }
@@ -1050,7 +1144,7 @@ fun RedeemPointsDialog(
     availablePoints: Int,
     lang: AppLanguage,
     onDismiss: () -> Unit,
-    onRedeem: (Int) -> Unit
+    onRedeem: (pts: Int, payoutMethod: String, upiId: String, holderName: String, accountNumber: String, ifscCode: String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var ptsInput by remember { mutableStateOf("") }
@@ -1213,7 +1307,10 @@ fun RedeemPointsDialog(
                         Text(Loc.get("Cancel", lang))
                     }
                     Button(
-                        onClick = { onRedeem(ptsToRedeem) },
+                        onClick = {
+                            val method = if (selectedTab == 0) "upi" else "bank"
+                            onRedeem(ptsToRedeem, method, upiId, holderName, accountNumber, ifscCode)
+                        },
                         enabled = canRedeem,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF023F97)),
                         modifier = Modifier.weight(1.5f)

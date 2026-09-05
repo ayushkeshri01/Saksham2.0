@@ -80,7 +80,13 @@ data class MechanicInfo(
     val city: String? = null,
     val panNumber: String? = null,
     val panStatus: String? = null,
-    val panName: String? = null
+    val panName: String? = null,
+    val payoutMethod: String? = null,
+    val upiHandle: String? = null,
+    val bankAccountNumber: String? = null,
+    val bankIfsc: String? = null,
+    val accountHolderName: String? = null,
+    val easebuzzBeneficiaryStatus: String? = null
 )
 
 data class KycPayload(
@@ -103,4 +109,35 @@ data class CheckMechanicResponse(
 data class MechanicBriefInfo(
     val id: String?,
     val name: String?
+)
+
+data class PayoutDetailsPayload(
+    val payoutMethod: String,
+    val upiHandle: String? = null,
+    val accountHolderName: String? = null,
+    val bankAccountNumber: String? = null,
+    val bankIfsc: String? = null
+)
+
+data class PayoutDetailsResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val mechanic: MechanicInfo? = null
+)
+
+data class RedeemPayload(
+    val pointsToRedeem: Int
+)
+
+data class RedeemResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val newPointsBalance: Int? = null,
+    val transfer: RedeemTransferInfo? = null
+)
+
+data class RedeemTransferInfo(
+    val transferId: String? = null,
+    val status: String? = null,
+    val uniqueRequestNumber: String? = null
 )

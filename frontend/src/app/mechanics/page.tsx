@@ -15,6 +15,14 @@ interface Mechanic {
   pan_number?: string;
   pan_status?: string;
   pan_name?: string;
+  payout_method?: string;
+  upi_handle?: string;
+  bank_account_number?: string;
+  bank_ifsc?: string;
+  account_holder_name?: string;
+  easebuzz_beneficiary_status?: string;
+  easebuzz_beneficiary_code?: string;
+  easebuzz_contact_id?: string;
 }
 
 interface RedemptionLog {
@@ -22,6 +30,11 @@ interface RedemptionLog {
   points_redeemed: number;
   amount_redeemed: number;
   created_at: string; // BIGINT as string from PG
+  status?: string;
+  easebuzz_transfer_id?: string;
+  unique_request_number?: string;
+  payout_method?: string;
+  payout_destination?: string;
 }
 
 export default function MechanicsPage() {
@@ -40,6 +53,9 @@ export default function MechanicsPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [redeemSuccess, setRedeemSuccess] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [registerMsg, setRegisterMsg] = useState<string | null>(null);
+  const [registerErr, setRegisterErr] = useState<string | null>(null);
 
   const fetchMechanics = async () => {
     try {
@@ -80,6 +96,8 @@ export default function MechanicsPage() {
   const handleSelectMechanic = (mech: Mechanic) => {
     setSelectedMech(mech);
     setRedeemPoints('');
+    setRegisterMsg(null);
+    setRegisterErr(null);
     fetchRedemptionHistory(mech.id);
   };
 
@@ -146,6 +164,30 @@ export default function MechanicsPage() {
     }
   };
 
+const handleRegisterBeneficiary = async () => {
+    if (!selectedMech) return;
+    try {
+      setRegistering(true);
+      setRegisterErr(null);
+      setRegisterMsg(null);
+
+      const res = await fetchWithAuth(
+        `/api/portal/mechanics/${selectedMech.id}/register-beneficiary`,
+        { method: 'POST', body: JSON.stringify({}) }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed.');
+
+      setRegisterMsg('Beneficiary registered successfully.');
+      fetchRedemptionHistory(selectedMech.id);
+      fetchMechanics();
+    } catch (err: unknown) {
+      setRegisterErr(err instanceof Error ? err.message : 'Registration failed.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   // Filter mechanics based on search term
   const filteredMechanics = mechanics.filter((m) => {
     const term = searchTerm.toLowerCase();
@@ -205,6 +247,7 @@ export default function MechanicsPage() {
                 <th className="px-6 py-3.5">Mobile</th>
                 <th className="px-6 py-3.5">City</th>
                 <th className="px-6 py-3.5 text-center">KYC Status</th>
+                <th className="px-6 py-3.5 text-center">Easebuzz</th>
                 <th className="px-6 py-3.5 text-right">Available Points</th>
                 <th className="px-6 py-3.5 text-right">Points Redeemed</th>
                 <th className="px-6 py-3.5 text-right">Redeemed Amount</th>
@@ -214,7 +257,7 @@ export default function MechanicsPage() {
             <tbody className="text-[13px] divide-y divide-[#DDE1E7]">
               {filteredMechanics.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-secondary">
+                  <td colSpan={10} className="px-6 py-8 text-center text-secondary">
                     No mechanics found matching search criteria.
                   </td>
                 </tr>
@@ -238,6 +281,15 @@ export default function MechanicsPage() {
                             : 'bg-rose-100 text-rose-800'
                       }`}>
                         {mech.pan_status || 'NOT_SUBMITTED'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-2 py-1 text-[11px] font-bold rounded-md ${
+                        mech.easebuzz_beneficiary_status === 'REGISTERED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {mech.easebuzz_beneficiary_status || 'NOT_REGISTERED'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-navy">
@@ -338,6 +390,45 @@ export default function MechanicsPage() {
                 )}
               </div>
 
+              {/* Easebuzz Beneficiary Status */}
+              <div className="bg-[#F5F9FE] border border-[#DDE1E7] p-4 rounded-lg space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] uppercase font-bold text-secondary">Easebuzz Beneficiary</span>
+                  <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full ${
+                    selectedMech.easebuzz_beneficiary_status === 'REGISTERED'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {selectedMech.easebuzz_beneficiary_status || 'NOT_REGISTERED'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <span className="text-[10px] text-secondary">Payout Method</span>
+                    <p className="text-[13px] font-semibold text-navy mt-0.5 uppercase">{selectedMech.payout_method || 'upi'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-secondary">Payout Destination</span>
+                    <p className="text-[13px] font-semibold text-navy mt-0.5 break-all">
+                      {selectedMech.payout_method === 'bank'
+                        ? `A/C ${selectedMech.bank_account_number || '-'} (${selectedMech.bank_ifsc || '-'})`
+                        : selectedMech.upi_handle || '-'}
+                    </p>
+                  </div>
+                </div>
+                {selectedMech.easebuzz_beneficiary_status !== 'REGISTERED' && selectedMech.pan_status === 'VERIFIED' && (
+                  <button
+                    onClick={handleRegisterBeneficiary}
+                    disabled={registering}
+                    className="mt-2 px-4 py-1.5 bg-[#005BC0] hover:bg-[#004494] disabled:bg-[#B0C4DE] text-white text-[11px] font-bold rounded shadow-sm transition-colors"
+                  >
+                    {registering ? 'Registering...' : 'Register Easebuzz Beneficiary'}
+                  </button>
+                )}
+                {registerMsg && <p className="text-[11px] text-emerald-700 font-semibold mt-1">{registerMsg}</p>}
+                {registerErr && <p className="text-[11px] text-rose-600 font-semibold mt-1">{registerErr}</p>}
+              </div>
+
               {/* Redeem Points Action Form */}
               <div className="border border-[#DDE1E7] p-5 rounded-lg space-y-4">
                 <h4 className="text-[13px] font-bold text-navy uppercase tracking-wider">Process Points Redemption</h4>
@@ -408,18 +499,34 @@ export default function MechanicsPage() {
                     <table className="w-full text-left">
                       <thead className="bg-[#FAFBFD] text-[10px] uppercase font-bold text-secondary border-b border-[#DDE1E7]">
                         <tr>
-                          <th className="px-4 py-2">Transaction ID</th>
-                          <th className="px-4 py-2">Points Released</th>
-                          <th className="px-4 py-2 text-right">Cash Amount</th>
+                          <th className="px-4 py-2">Transfer ID</th>
+                          <th className="px-4 py-2">Status</th>
+                          <th className="px-4 py-2">Points</th>
+                          <th className="px-4 py-2 text-right">Amount</th>
+                          <th className="px-4 py-2">Payout Mode</th>
                           <th className="px-4 py-2 text-right">Processed At</th>
                         </tr>
                       </thead>
                       <tbody className="text-[12px] divide-y divide-[#DDE1E7]">
                         {redemptions.map((log) => (
                           <tr key={log.id} className="hover:bg-[#FAFBFD]">
-                            <td className="px-4 py-2.5 font-mono text-[10px] text-secondary">{log.id.slice(0, 8)}...</td>
+                            <td className="px-4 py-2.5 font-mono text-[10px] text-secondary" title={log.easebuzz_transfer_id || ''}>
+                              {log.easebuzz_transfer_id ? log.easebuzz_transfer_id.slice(0, 12) + '...' : '-'}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                                log.status === 'PAID'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : log.status === 'PENDING'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {log.status || 'PAID'}
+                              </span>
+                            </td>
                             <td className="px-4 py-2.5 font-semibold text-navy">{log.points_redeemed} pts</td>
                             <td className="px-4 py-2.5 text-right font-bold text-emerald-600">₹{Number(log.amount_redeemed).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2.5 uppercase text-secondary">{log.payout_method || '-'}</td>
                             <td className="px-4 py-2.5 text-right text-secondary">
                               {new Date(parseInt(log.created_at, 10)).toLocaleString('en-IN')}
                             </td>
